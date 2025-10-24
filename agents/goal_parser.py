@@ -50,26 +50,3 @@ class GoalParserAgent:
         except Exception as e:
             print(f"An error occurred during agent run: {e}")
             return None
-    
-
-if __name__ == "__main__":
-    parser = GoalParserAgent()
-    example_user_goal = "I want to become a successful ai ml who can build scalable and secure applications from scratch."
-    
-    print("--- Sending Goal to Agent ---")
-    json_result_string = parser.parse_goal(example_user_goal)
-    
-    if json_result_string:
-        print("\n--- Agent's Cleaned Output (JSON String) ---")
-        print(json_result_string)
-        
-        try:
-            # This should now succeed
-            data = json.loads(json_result_string)
-            print("\n--- Parsed Python Dictionary (Success!) ---")
-            print(json.dumps(data, indent=4))
-        except json.JSONDecodeError as e:
-            print(f"\nError: Still failed to parse JSON. Details: {e}")
-            print("This can happen if the agent's output is not valid JSON (e.g., missing comma, trailing comma).")
-    else:
-        print("\nError: Did not receive any content from the agent.")
