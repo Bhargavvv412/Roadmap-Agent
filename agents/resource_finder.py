@@ -14,10 +14,11 @@ if not api_key:
 class ResourceFinderAgent:
     """
     Finds specific learning resources for a list of topics
-    by calling an agent for each topic individually.
+    by calling an agent for each topic individually and respecting
+    API rate limits.
     """
     def __init__(self):
-        # --- FIX 1: Pass the api_key to the model ---
+        # FIX 1: You must pass the api_key to the model
         self.agent = Agent(
             model=Gemini(api_key=api_key),
             name="Resource Finder Agent",
@@ -27,11 +28,10 @@ class ResourceFinderAgent:
     def _find_single_resource(self, topic: str):
         """
         Private helper method to find resources for *one* topic.
-        This is much more reliable than batching.
+        This is more reliable than batching.
         """
         
-        # --- FIX 2: Add JSON-only instruction to prompt ---
-        # This prompt is now hyper-focused on one topic.
+        # This prompt is hyper-focused on one topic and demands JSON.
         prompt = f"""
         Find the best beginner-friendly resources for this single topic: "{topic}"
         
@@ -53,20 +53,28 @@ class ResourceFinderAgent:
             result = self.agent.run(prompt)
             raw_content = result.content
             
-            # --- FIX 3: Add robust JSON cleaning ---
+            # Clean the JSON output from the agent
             start_index = raw_content.find('{')
             end_index = raw_content.rfind('}')
             
             if start_index != -1 and end_index != -1 and end_index > start_index:
                 json_string = raw_content[start_index : end_index + 1]
-                return json.loads(json_string) # Return the parsed dictionary
+                
+                # FIX 2: Add extra error handling for bad agent JSON
+                # This fixes your "Expecting ',' delimiter" error
+                try:
+                    return json.loads(json_string) # Return the parsed dictionary
+                except json.JSONDecodeError as e:
+                    print(f"Error: Agent returned invalid JSON for '{topic}'. Error: {e}")
+                    print(f"Raw output: {raw_content}")
+                    return None
             else:
-                print(f"Error: Could not parse JSON for topic '{topic}'")
-                print(f"Raw output: {raw_content}")
+                print(f"Error: Could not find JSON in response for '{topic}'")
                 return None
                 
         except Exception as e:
-            print(f"Agent error finding resource for '{topic}': {e}")
+            # This catches API errors like the 429
+            print(f"Agent API error for '{topic}': {e}")
             return None
 
     def find_resources(self, roadmap_json: str):
@@ -76,7 +84,7 @@ class ResourceFinderAgent:
         try:
             roadmap = json.loads(roadmap_json)
         except json.JSONDecodeError as e:
-            print(f"Error: Invalid roadmap JSON provided. {e}")
+            print(f"Error: Invalid roadmap JSON provided to find_resources. {e}")
             return json.dumps({"error": "Invalid input JSON"}, indent=2)
             
         topics = [r["topic"] for r in roadmap.get("roadmap", [])]
@@ -87,8 +95,7 @@ class ResourceFinderAgent:
             
         all_resources = []
         
-        # --- FIX 4: Loop through topics instead of batching ---
-        print(f"--- Finding resources for {len(topics)} topics ---")
+        print(f"--- Finding resources for {len(topics)} topics (with 5 sec delay) ---")
         for i, topic in enumerate(topics):
             print(f"Searching for: '{topic}' ({i+1}/{len(topics)})...")
             
@@ -97,9 +104,9 @@ class ResourceFinderAgent:
             if resource_data:
                 all_resources.append(resource_data)
                 
-            # Add a small delay to avoid hitting API rate limits
-            time.sleep(1) 
+            # FIX 3: Change sleep time to 5 seconds
+            # The free tier limit is 15 req/min (4s/req). 5s is safer.
+            time.sleep(5) 
             
         print("--- Resource finding complete ---")
-        # Return the final list as a JSON string
         return json.dumps({"resources": all_resources}, indent=2)
